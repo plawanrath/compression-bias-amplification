@@ -12,9 +12,9 @@ quantization:
   models_dir: "./models"
 
 dataset:
-  name: "heegyu/bbq"
-  bias_categories: ["Age", "Gender_identity", "Race_ethnicity", "Religion", "SES"]
-  condition: "ambiguous"
+  name: "Elfsong/BBQ"
+  bias_categories: ["age", "gender_identity", "race_ethnicity", "religion", "ses"]
+  condition: "ambig"
   output_path: "./data/processed/bbq_ambiguous.jsonl"
 
 inference:

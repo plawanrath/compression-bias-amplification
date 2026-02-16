@@ -38,28 +38,27 @@ def _extract_answer_info(example: dict) -> dict:
 
     if unknown_idx is None:
         # Fallback: use the label (correct answer) as unknown in ambiguous condition
-        unknown_idx = example["label"]
+        # Elfsong/BBQ uses 'answer_label', other versions use 'label'
+        unknown_idx = example.get("answer_label", example.get("label", 2))
 
     # The other two indices are the demographic-group answers.
     # 'question_polarity' determines which one is stereotypical:
     #   - "neg" means the question asks about a negative attribute
     #   - "nonneg" means the question asks about a non-negative attribute
-    # The 'target_loc' field tells us where the stereotyped group is placed
-    # (ans0, ans1, ans2), but more reliably we use answer_info.
     #
-    # BBQ answer_info format: {"ans0": ["text", "group_label"], ...}
-    # We need to figure out which non-unknown answer is the stereotype target.
+    # Elfsong/BBQ provides 'target_label' directly as the stereotype target index.
+    # Fallback to 'target_loc' string format for other BBQ versions.
 
     answer_info = example.get("answer_info", {})
     non_unknown = [i for i in range(3) if i != unknown_idx]
 
-    # Determine stereotype target from question_polarity and additional_metadata
-    # In BBQ: for "neg" polarity questions, the stereotyped group is the one
-    # society would negatively associate with the attribute asked about.
-    # 'target_loc' directly tells us where the targeted group answer is.
+    # Determine stereotype target - prefer 'target_label' (Elfsong/BBQ format)
+    target_label = example.get("target_label")
     target_loc = example.get("target_loc", "")
 
-    if target_loc == "ans0":
+    if target_label is not None:
+        stereotype_idx = int(target_label)
+    elif target_loc == "ans0":
         stereotype_idx = 0
     elif target_loc == "ans1":
         stereotype_idx = 1
@@ -92,22 +91,24 @@ def prepare_dataset(config_path="config.yaml"):
     print(f"Loading dataset: {ds_name}")
     dataset = load_dataset(ds_name)
 
-    # BBQ may come as a single split or multiple; flatten to a list
+    # Elfsong/BBQ has splits named by category (lowercase).
+    # Load only the splits matching our target categories.
     all_examples = []
-    if isinstance(dataset, dict):
-        for split_name in dataset:
+    available_splits = list(dataset.keys())
+    print(f"Available splits: {available_splits}")
+
+    for split_name in available_splits:
+        # Check if this split matches one of our target categories
+        # Categories in config may be lowercase (matching split names)
+        if split_name in categories or split_name.lower() in [c.lower() for c in categories]:
             all_examples.extend(dataset[split_name])
-    else:
-        all_examples.extend(dataset)
 
     print(f"Total examples loaded: {len(all_examples)}")
 
-    # Filter to ambiguous condition and target categories
+    # Filter to ambiguous condition only (category already filtered by split selection)
     filtered = []
     for ex in all_examples:
         if ex.get("context_condition") != condition:
-            continue
-        if ex.get("category") not in categories:
             continue
         filtered.append(ex)
 
@@ -118,6 +119,8 @@ def prepare_dataset(config_path="config.yaml"):
     with open(output_path, "w") as f:
         for ex in filtered:
             answer_info = _extract_answer_info(ex)
+            # Elfsong/BBQ uses 'answer_label', other versions use 'label'
+            label = ex.get("answer_label", ex.get("label"))
             record = {
                 "item_id": ex.get("example_id", count),
                 "category": ex["category"],
@@ -128,7 +131,7 @@ def prepare_dataset(config_path="config.yaml"):
                 "anti_stereotype_target_index": answer_info["anti_stereotype_target_index"],
                 "unknown_index": answer_info["unknown_index"],
                 "question_polarity": ex.get("question_polarity", ""),
-                "label": ex.get("label"),
+                "label": label,
             }
             f.write(json.dumps(record) + "\n")
             count += 1
