@@ -1,0 +1,10 @@
+mlx-lm>=0.20.0
+datasets
+pandas
+numpy
+scipy
+statsmodels
+matplotlib
+seaborn
+tqdm
+pyyaml
