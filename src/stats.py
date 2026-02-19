@@ -58,7 +58,8 @@ def logistic_regression_trend(df: pd.DataFrame):
     ).astype(int)
 
     X = pd.get_dummies(
-        df[["quant", "category"]], columns=["category"], drop_first=True
+        df[["quant", "category"]], columns=["category"], drop_first=True,
+        dtype=float,
     )
     X = sm.add_constant(X)
     y = df["stereotype_chosen"]

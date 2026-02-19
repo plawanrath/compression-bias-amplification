@@ -1,10 +1,16 @@
 """Main experiment loop: run inference across all model x quantization combinations."""
 
 import json
+import sys
 import time
 from pathlib import Path
 
+# Add project root to path for src imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import mlx.core as mx
 import mlx_lm
+from mlx_lm.sample_utils import make_sampler
 import yaml
 from tqdm import tqdm
 
@@ -31,30 +37,42 @@ def run_experiment(config_path="config.yaml"):
                     f"{model_cfg['name']}-q{bits}"
                 )
 
+            out_path = (
+                f"{cfg['output']['raw_results_dir']}/"
+                f"{model_cfg['name']}_q{bits}.jsonl"
+            )
+
+            # Skip if output already has the expected number of lines
+            expected_lines = len(prompts) * len(cfg["inference"]["seeds"])
+            out_file = Path(out_path)
+            if out_file.exists() and sum(1 for _ in open(out_file)) == expected_lines:
+                print(f"  Skipping {model_cfg['name']} Q{bits} (already complete: {expected_lines} lines)")
+                continue
+
             print(f"\n{'=' * 60}")
             print(f"Loading {model_cfg['name']} @ Q{bits}")
             print(f"Model dir: {model_dir}")
             model, tokenizer = mlx_lm.load(model_dir)
 
-            out_path = (
-                f"{cfg['output']['raw_results_dir']}/"
-                f"{model_cfg['name']}_q{bits}.jsonl"
-            )
             Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+
+            # Create sampler with configured temperature
+            sampler = make_sampler(temp=cfg["inference"]["temperature"])
 
             with open(out_path, "w") as f:
                 for item in tqdm(prompts, desc=f"Q{bits}"):
                     prompt = format_prompt(item, model_cfg["name"], tokenizer)
 
                     for seed in cfg["inference"]["seeds"]:
+                        # Set random seed for reproducibility
+                        mx.random.seed(seed)
                         t0 = time.time()
                         raw = mlx_lm.generate(
                             model,
                             tokenizer,
                             prompt=prompt,
                             max_tokens=cfg["inference"]["max_tokens"],
-                            temp=cfg["inference"]["temperature"],
-                            seed=seed,
+                            sampler=sampler,
                         )
                         elapsed = time.time() - t0
 

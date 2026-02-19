@@ -24,9 +24,11 @@ inference:
   seeds: [42, 123, 456, 789, 1024]
 
 baseline_filter:
-  # Only keep items where BF16 SRS falls in this range
-  min_srs: 0.45
-  max_srs: 0.70
+  # Only keep items where BF16 per-item SRS falls in this range
+  # With 5 seeds, possible values are {0, 0.2, 0.4, 0.6, 0.8, 1.0}
+  # 0.20 captures any item showing latent bias (at least 1/5 seeds stereotypical)
+  min_srs: 0.20
+  max_srs: 1.01
 
 output:
   raw_results_dir: "./results/raw"
