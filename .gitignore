@@ -3,6 +3,7 @@ models/
 data/
 results/
 .DS_Store
+paper_latex.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

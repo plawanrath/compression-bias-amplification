@@ -453,6 +453,131 @@ def compute_transition_analysis(
     return pd.DataFrame(rows)
 
 
+# =============================================================================
+# Perplexity vs Bias Analysis
+# =============================================================================
+
+def generate_perplexity_vs_bias_table(
+    ppl_data: list[dict],
+    transition_df: pd.DataFrame,
+    output_path: Path,
+) -> pd.DataFrame:
+    """Create table juxtaposing perplexity change with bias emergence rates.
+
+    This is the key evidence for the 'evaluation gap' argument: perplexity
+    barely changes while 6-21% of items develop new biases.
+    """
+    ppl_df = pd.DataFrame(ppl_data)
+
+    rows = []
+    for model_name in ppl_df["model"].unique():
+        mppl = ppl_df[ppl_df["model"] == model_name]
+        bf16_ppl_row = mppl[mppl["quant"] == 16]
+        if bf16_ppl_row.empty:
+            continue
+        bf16_ppl = bf16_ppl_row.iloc[0]["perplexity"]
+
+        for _, row in mppl.iterrows():
+            quant = row["quant"]
+            ppl = row["perplexity"]
+            ppl_change_pct = (ppl - bf16_ppl) / bf16_ppl * 100 if bf16_ppl > 0 else 0
+
+            # Match transition data (aggregated across categories)
+            trans = transition_df[
+                (transition_df["model"] == model_name)
+                & (transition_df["quant"] == quant)
+            ]
+            pct_new_biases = trans["pct_became_biased"].values[0] if not trans.empty else 0.0
+
+            rows.append({
+                "model": model_name,
+                "quant": quant,
+                "perplexity": round(ppl, 4),
+                "ppl_se": round(row.get("ppl_se", 0), 4),
+                "ppl_change_pct": round(ppl_change_pct, 2),
+                "pct_new_biases": round(pct_new_biases, 1),
+            })
+
+    result = pd.DataFrame(rows)
+    result.to_csv(output_path, index=False)
+    return result
+
+
+def plot_perplexity_vs_bias(
+    ppl_bias_df: pd.DataFrame,
+    output_path: Path,
+):
+    """Dual-axis figure: flat perplexity vs rising bias emergence.
+
+    Left axis (dashed): perplexity (barely moves)
+    Right axis (solid): % of items developing new biases (rises steeply)
+    """
+    models = sorted(ppl_bias_df["model"].unique())
+    quant_order = [16, 8, 6, 4, 3]
+    quant_labels = ["BF16", "Q8", "Q6", "Q4", "Q3"]
+
+    # Color palette
+    colors = sns.color_palette("tab10", len(models))
+
+    fig, ax1 = plt.subplots(figsize=(9, 5))
+    ax2 = ax1.twinx()
+
+    for i, model_name in enumerate(models):
+        mdf = ppl_bias_df[ppl_bias_df["model"] == model_name].copy()
+        mdf = mdf.set_index("quant").reindex(quant_order)
+
+        # Left axis: perplexity (dashed)
+        ax1.plot(
+            range(len(quant_order)),
+            mdf["perplexity"],
+            color=colors[i],
+            linestyle="--",
+            marker="s",
+            markersize=5,
+            alpha=0.7,
+            label=f"{model_name} (PPL)",
+        )
+
+        # Right axis: % new biases (solid)
+        ax2.plot(
+            range(len(quant_order)),
+            mdf["pct_new_biases"],
+            color=colors[i],
+            linestyle="-",
+            marker="o",
+            markersize=6,
+            linewidth=2,
+            label=f"{model_name} (new biases)",
+        )
+
+    ax1.set_xticks(range(len(quant_order)))
+    ax1.set_xticklabels(quant_labels)
+    ax1.set_xlabel("Quantization Level")
+    ax1.set_ylabel("Perplexity (dashed)", color="gray")
+    ax2.set_ylabel("% Items With New Biases (solid)")
+
+    # Combine legends
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(
+        lines1 + lines2,
+        labels1 + labels2,
+        loc="upper left",
+        fontsize=7,
+        framealpha=0.9,
+    )
+
+    fig.suptitle(
+        "The Evaluation Gap: Perplexity vs. Bias Emergence",
+        fontsize=12,
+        fontweight="bold",
+    )
+    fig.tight_layout()
+    fig.savefig(output_path.with_suffix(".pdf"), dpi=300)
+    fig.savefig(output_path.with_suffix(".png"), dpi=300)
+    plt.close(fig)
+
+
 def plot_transition_chart(transition_df: pd.DataFrame, output_path: Path):
     """Bar chart showing % of previously-unbiased items that become biased at each quant."""
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -877,6 +1002,34 @@ def analyze(config_path="config.yaml"):
 
         plot_transition_chart(transition_df, filt_comparison_dir / "transition_chart")
         print(f"  Saved: {filt_comparison_dir}/transition_chart.{{pdf,png}}")
+
+        # ==================================================================
+        # PERPLEXITY VS BIAS ANALYSIS
+        # ==================================================================
+        ppl_json_path = Path("results/perplexity/perplexity_results.json")
+        if ppl_json_path.exists():
+            print(f"\n{'=' * 60}")
+            print("=== Perplexity vs Bias Emergence Analysis ===")
+            print(f"{'=' * 60}")
+
+            ppl_data = json.loads(ppl_json_path.read_text())
+
+            ppl_dir = Path("results/perplexity")
+            ppl_dir.mkdir(parents=True, exist_ok=True)
+
+            ppl_bias_df = generate_perplexity_vs_bias_table(
+                ppl_data, transition_df,
+                ppl_dir / "perplexity_vs_bias.csv",
+            )
+            print(f"  Saved: {ppl_dir}/perplexity_vs_bias.csv")
+            print("\n--- Perplexity vs Bias Summary ---")
+            print(ppl_bias_df.to_string(index=False))
+
+            plot_perplexity_vs_bias(ppl_bias_df, fig_dir / "perplexity_vs_bias")
+            print(f"  Saved: {fig_dir}/perplexity_vs_bias.{{pdf,png}}")
+        else:
+            print(f"\n  Skipping perplexity analysis: {ppl_json_path} not found.")
+            print("  Run scripts/03a_compute_perplexity.py first.")
 
     plt.close("all")
     print("\n✓ Analysis complete! Check results/ directory for outputs.")

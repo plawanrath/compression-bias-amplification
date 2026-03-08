@@ -30,6 +30,13 @@ baseline_filter:
   min_srs: 0.20
   max_srs: 1.01
 
+perplexity:
+  num_samples: 256
+  sequence_length: 512
+  batch_size: 8
+  data_path: "allenai/tulu-3-sft-mixture"
+  seed: 123
+
 output:
   raw_results_dir: "./results/raw"
   aggregated_dir: "./results/aggregated"
