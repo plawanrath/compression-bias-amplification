@@ -18,6 +18,28 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+## Pre-built Quantized Models (HuggingFace)
+
+All 15 MLX-format model artifacts are grouped in a single HuggingFace Collection:
+
+**[Quantization Undoes Alignment — IEEE Cloud Summit 2026](https://huggingface.co/collections/plawanrath/quantization-undoes-alignment-ieee-cloud-summit-2026-69fc1cdfe3d46535cc2ba579)**
+
+You can also access each variant directly. Either way you can skip `scripts/01_download_models.py` and load these directly:
+
+| Base | BF16 | Q8 | Q6 | Q4 | Q3 |
+|---|---|---|---|---|---|
+| Qwen2.5-7B-Instruct | [bf16](https://huggingface.co/plawanrath/qwen2.5-7b-instruct-bf16-mlx-cba) | [q8](https://huggingface.co/plawanrath/qwen2.5-7b-instruct-q8-mlx-cba) | [q6](https://huggingface.co/plawanrath/qwen2.5-7b-instruct-q6-mlx-cba) | [q4](https://huggingface.co/plawanrath/qwen2.5-7b-instruct-q4-mlx-cba) | [q3](https://huggingface.co/plawanrath/qwen2.5-7b-instruct-q3-mlx-cba) |
+| Mistral-7B-Instruct-v0.3 | [bf16](https://huggingface.co/plawanrath/mistral-7b-instruct-v0.3-bf16-mlx-cba) | [q8](https://huggingface.co/plawanrath/mistral-7b-instruct-v0.3-q8-mlx-cba) | [q6](https://huggingface.co/plawanrath/mistral-7b-instruct-v0.3-q6-mlx-cba) | [q4](https://huggingface.co/plawanrath/mistral-7b-instruct-v0.3-q4-mlx-cba) | [q3](https://huggingface.co/plawanrath/mistral-7b-instruct-v0.3-q3-mlx-cba) |
+| Phi-3.5-mini-Instruct | [bf16](https://huggingface.co/plawanrath/phi-3.5-mini-instruct-bf16-mlx-cba) | [q8](https://huggingface.co/plawanrath/phi-3.5-mini-instruct-q8-mlx-cba) | [q6](https://huggingface.co/plawanrath/phi-3.5-mini-instruct-q6-mlx-cba) | [q4](https://huggingface.co/plawanrath/phi-3.5-mini-instruct-q4-mlx-cba) | [q3](https://huggingface.co/plawanrath/phi-3.5-mini-instruct-q3-mlx-cba) |
+
+```python
+from mlx_lm import load, generate
+model, tokenizer = load("plawanrath/qwen2.5-7b-instruct-q4-mlx-cba")
+print(generate(model, tokenizer, prompt="Hello", max_tokens=64))
+```
+
+These are the **exact** artifacts used in §4.3 of the paper. Quantization config: `mlx_lm.convert` with `--q-group-size 64`, affine mode. License is inherited from each base model (Qwen2.5: Apache-2.0, Mistral-v0.3: Apache-2.0, Phi-3.5-mini: MIT).
+
 ## Execution
 
 Run the numbered scripts in order:
